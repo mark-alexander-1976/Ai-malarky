@@ -626,7 +626,7 @@ public class Game
         Console.ForegroundColor = ConsoleColor.Magenta;
         Console.WriteLine(@"
 ╔══════════════════════════════════════════════════════════════╗
-║          T H E   L O S T   K I N G D O M                    ║
+║          T H E   L O S T   K I N G D O M                     ║
 ║                A Text Adventure                              ║
 ║           (in the style of Adventureland, 1978)              ║
 ╚══════════════════════════════════════════════════════════════╝");
@@ -649,7 +649,7 @@ public class Game
   ┌─ COMMANDS ──────────────────────────────────────────────────┐
   │  LOOK / L              - Describe your surroundings         │
   │  EXAMINE / X <thing>   - Examine an item or object          │
-  │  GO <dir>  or  N/S/E/W/U/D  - Move in a direction          │
+  │  GO <dir>  or  N/S/E/W/U/D  - Move in a direction           │
   │  TAKE / GET <item>     - Pick up an item                    │
   │  DROP <item>           - Put an item down                   │
   │  INVENTORY / I         - List what you are carrying         │
