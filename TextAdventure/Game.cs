@@ -628,7 +628,6 @@ public class Game
 ╔══════════════════════════════════════════════════════════════╗
 ║          T H E   L O S T   K I N G D O M                     ║
 ║                A Text Adventure                              ║
-║           (in the style of Adventureland, 1978)              ║
 ╚══════════════════════════════════════════════════════════════╝");
         Console.ResetColor();
 
