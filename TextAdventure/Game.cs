@@ -118,7 +118,12 @@ public class Game
                 if (string.IsNullOrEmpty(noun))
                     Println("Take what?");
                 else
-                    DoTake(noun.TrimStart("up ".ToCharArray()));
+                {
+                    // Handle "pick up <item>" by stripping the leading "up "
+                    string itemName = noun.StartsWith("up ", StringComparison.OrdinalIgnoreCase)
+                        ? noun[3..] : noun;
+                    DoTake(itemName);
+                }
                 break;
 
             case "drop":
