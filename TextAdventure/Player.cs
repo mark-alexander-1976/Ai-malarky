@@ -4,6 +4,7 @@ public class Player
 {
     public int CurrentLocationId { get; set; } = 1;
     public List<Item> Inventory { get; } = [];
+    public HashSet<int> SquirrelLocationsCleared { get; } = [];
     public int Health { get; set; } = 100;
     public bool IsAlive => Health > 0;
     public bool HasWon { get; set; }
