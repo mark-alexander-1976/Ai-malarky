@@ -8,6 +8,9 @@ public class Game
 {
     private readonly GameWorld _world;
     private readonly Player _player;
+    private static readonly Random _random = new();
+    private readonly HashSet<int> _squirrelLocationIds = [21, 22, 23, 24, 25];
+    private int _activeSquirrelLocationId;
 
     // Synonyms for directions
     private static readonly Dictionary<string, string> DirectionAliases = new(StringComparer.OrdinalIgnoreCase)
@@ -224,6 +227,20 @@ public class Game
             return;
         }
 
+        if (IsSquirrelLocation(here.Id) && direction == "north" && !_player.SquirrelLocationsCleared.Contains(here.Id))
+        {
+            if (_activeSquirrelLocationId != here.Id)
+            {
+                _activeSquirrelLocationId = here.Id;
+                Println(GetForcedSquirrelEncounterText(here.Id));
+            }
+            else
+            {
+                Println("The squirrel blocks your path! (Type FIGHT SQUIRREL to drive it off.)");
+            }
+            return;
+        }
+
         _player.CurrentLocationId = destId;
         Location dest = CurrentLocation();
 
@@ -252,9 +269,6 @@ public class Game
 
     private void ApplyLocationEffects(Location loc)
     {
-        if (!loc.IsDangerous) return;
-
-        // Swamp: drains health unless carrying Amulet
         if (loc.Id == 13)
         {
             if (_player.HasItem("Amulet"))
@@ -268,9 +282,10 @@ public class Game
                 if (!_player.IsAlive)
                     Println("The swamp has claimed you...");
             }
+
+            return;
         }
 
-        // Dragon's Lair: instant death without sword
         if (loc.Id == 19 && !_player.DragonDefeated)
         {
             if (!_player.HasItem("Sword"))
@@ -283,6 +298,27 @@ public class Game
             {
                 Println("The dragon eyes you warily, noticing the sword in your hand.");
                 Println("(Type FIGHT DRAGON to battle the beast.)");
+            }
+
+            return;
+        }
+
+        if (IsSquirrelLocation(loc.Id) && !_player.SquirrelLocationsCleared.Contains(loc.Id))
+        {
+            if (_activeSquirrelLocationId == loc.Id)
+            {
+                Println($"{GetSquirrelName(loc.Id)} is still here, glaring at you menacingly. (Type FIGHT SQUIRREL.)");
+                return;
+            }
+
+            if (_random.Next(2) == 0)
+            {
+                _activeSquirrelLocationId = loc.Id;
+                Println(GetRandomSquirrelEncounterText(loc.Id));
+            }
+            else
+            {
+                Println("You feel like you're being watched. Something lurks in the branches above...");
             }
         }
     }
@@ -504,6 +540,8 @@ public class Game
             case "Sword":
                 if (here.Id == 19 && !_player.DragonDefeated)
                     Println("You brandish the sword at the dragon. (Type FIGHT DRAGON to attack!)");
+                else if (IsSquirrelLocation(here.Id) && _activeSquirrelLocationId == here.Id && !_player.SquirrelLocationsCleared.Contains(here.Id))
+                    Println("You brandish the sword at the squirrel. (Type FIGHT SQUIRREL to attack!)");
                 else
                     Println("You wave the sword in the air. It makes a satisfying whoosh.");
                 break;
@@ -521,54 +559,61 @@ public class Game
     private void DoFight(string noun)
     {
         Location here = CurrentLocation();
+        bool targetingDragon = here.Id == 19 &&
+                               (string.IsNullOrEmpty(noun) || noun.Equals("dragon", StringComparison.OrdinalIgnoreCase));
+        bool targetingSquirrel = IsSquirrelLocation(here.Id) &&
+                                 (string.IsNullOrEmpty(noun) ||
+                                  noun.Equals("squirrel", StringComparison.OrdinalIgnoreCase) ||
+                                  noun.Equals("squirrel king", StringComparison.OrdinalIgnoreCase));
 
-        if (here.Id != 19)
+        if (targetingDragon)
         {
-            Println("There is nothing to fight here.");
+            if (_player.DragonDefeated)
+            {
+                Println("The dragon is already defeated. Its huge carcass lies on the cave floor.");
+                return;
+            }
+
+            if (!_player.HasItem("Sword"))
+            {
+                Println("You attack the dragon bare-handed. It's not impressed.");
+                Println("The dragon's tail sweeps you across the cave with bone-crushing force.");
+                _player.Health = 0;
+                return;
+            }
+
+            Println("\nYou raise the sword and charge the dragon with a battle cry!");
+            Println("The beast spews a cone of flame – you dive aside, singeing your cloak.");
+            Println("Slashing upward, your blade finds a gap in its scales!");
+            Println("The dragon thrashes wildly – you leap back as its claws rend the stone floor.");
+            Println("With a final desperate thrust you drive the sword home.");
+            Println("\nThe great dragon lets out a thunderous death roar and crashes to the ground.");
+            Println("The cave shakes. Then... silence.");
+            Println("\nA passage to the NORTH is now open.");
+
+            _player.DragonDefeated = true;
+            _player.Health -= 10;
+            here.Exits["north"] = 21;
+
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Println($"\n*** You slew the dragon! (Health: {_player.Health}/100) ***");
+            Console.ResetColor();
             return;
         }
 
-        bool targetingDragon = string.IsNullOrEmpty(noun) ||
-                               noun.Equals("dragon", StringComparison.OrdinalIgnoreCase);
+        if (targetingSquirrel)
+        {
+            DoFightSquirrel(here);
+            return;
+        }
 
-        if (!targetingDragon)
+        if (here.Id == 19 || IsSquirrelLocation(here.Id))
         {
             Println("There is no such enemy here.");
             return;
         }
 
-        if (_player.DragonDefeated)
-        {
-            Println("The dragon is already defeated. Its huge carcass lies on the cave floor.");
-            return;
-        }
-
-        if (!_player.HasItem("Sword"))
-        {
-            Println("You attack the dragon bare-handed. It's not impressed.");
-            Println("The dragon's tail sweeps you across the cave with bone-crushing force.");
-            _player.Health = 0;
-            return;
-        }
-
-        // Epic fight sequence
-        Println("\nYou raise the sword and charge the dragon with a battle cry!");
-        Println("The beast spews a cone of flame – you dive aside, singeing your cloak.");
-        Println("Slashing upward, your blade finds a gap in its scales!");
-        Println("The dragon thrashes wildly – you leap back as its claws rend the stone floor.");
-        Println("With a final desperate thrust you drive the sword home.");
-        Println("\nThe great dragon lets out a thunderous death roar and crashes to the ground.");
-        Println("The cave shakes. Then... silence.");
-        Println("\nA passage to the NORTH is now open.");
-
-        _player.DragonDefeated = true;
-        _player.Health -= 10;  // You got a bit singed
-        // Unlock north exit
-        here.Exits["north"] = 20;
-
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Println($"\n*** You slew the dragon! (Health: {_player.Health}/100) ***");
-        Console.ResetColor();
+        Println("There is nothing to fight here.");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -602,6 +647,123 @@ public class Game
     // ─────────────────────────────────────────────────────────────────────────
 
     private Location CurrentLocation() => _world.GetLocation(_player.CurrentLocationId);
+
+    private bool IsSquirrelLocation(int locationId) => _squirrelLocationIds.Contains(locationId);
+
+    private static string GetSquirrelName(int locationId) => locationId switch
+    {
+        21 => "the grey squirrel",
+        22 => "the fat brown squirrel",
+        23 => "the furious red squirrel",
+        24 => "the rabid black squirrel",
+        25 => "the Squirrel King",
+        _ => "the squirrel",
+    };
+
+    private static string GetRandomSquirrelEncounterText(int locationId) => locationId switch
+    {
+        21 => "A grey squirrel drops from a root above and lands squarely in your path, chittering like an outraged sentry!",
+        22 => "An enormous brown squirrel rolls out of the acorns, stuffs one into its cheeks, and squares up for battle!",
+        23 => "A red squirrel hurtles down the inside of the trunk in a blur of claws and tail, shrieking a challenge!",
+        24 => "A black squirrel bursts from the leaves with wild eyes and a pine cone clutched like a grenade!",
+        25 => "Trumpeting squeaks echo through the chamber as the Squirrel King springs onto his acorn throne and points a bottle-cap blade at you!",
+        _ => "A squirrel leaps from hiding and blocks your way!",
+    };
+
+    private static string GetForcedSquirrelEncounterText(int locationId) => locationId switch
+    {
+        21 => "A grey squirrel leaps from the roots and blocks the northern burrow! (Type FIGHT SQUIRREL.)",
+        22 => "A fat brown squirrel skids across the acorns and plants itself in your way! (Type FIGHT SQUIRREL.)",
+        23 => "A furious red squirrel scampers down the hollow trunk and cuts off your path! (Type FIGHT SQUIRREL.)",
+        24 => "A rabid black squirrel dives from the canopy and lands between you and the bridge! (Type FIGHT SQUIRREL.)",
+        25 => "The Squirrel King rises in righteous fury and bars the way to the vault! (Type FIGHT SQUIRREL.)",
+        _ => "A squirrel blocks your path! (Type FIGHT SQUIRREL.)",
+    };
+
+    private void DoFightSquirrel(Location here)
+    {
+        if (_player.SquirrelLocationsCleared.Contains(here.Id))
+        {
+            Println("You've already defeated the squirrel here.");
+            return;
+        }
+
+        if (_activeSquirrelLocationId != here.Id)
+        {
+            Println("There's no squirrel threatening you right now.");
+            return;
+        }
+
+        bool hasSword = _player.HasItem("Sword");
+        int damageTaken = (here.Id, hasSword) switch
+        {
+            (21, true) => 5,
+            (21, false) => 15,
+            (22, true) => 5,
+            (22, false) => 15,
+            (23, true) => 5,
+            (23, false) => 20,
+            (24, true) => 10,
+            (24, false) => 20,
+            (25, true) => 15,
+            (25, false) => 30,
+            _ => hasSword ? 5 : 15,
+        };
+
+        switch (here.Id)
+        {
+            case 21:
+                Println("\nYou lunge at the grey squirrel as it chitters an alarm.");
+                Println(hasSword
+                    ? "One quick sweep of your sword parts whiskers from pride, and the creature flees into the roots."
+                    : "You grapple the furious little beast bare-handed and finally hurl it into a pile of nut shells.");
+                break;
+
+            case 22:
+                Println("\nThe fat brown squirrel barrels across the grove like a furry boulder.");
+                Println(hasSword
+                    ? "You sidestep, tap it smartly with the flat of your blade, and send it tumbling into the acorns."
+                    : "It batters your shins and climbs your cloak before you shake it loose with a desperate roar.");
+                break;
+
+            case 23:
+                Println("\nThe furious red squirrel spirals around the trunk so fast it seems to be in three places at once.");
+                Println(hasSword
+                    ? "You time the motion, slash through a rain of bark, and force it squealing back into a knot-hole."
+                    : "You swat, duck, and endure a storm of claws before pinning it long enough to send it scampering away.");
+                break;
+
+            case 24:
+                Println("\nThe rabid black squirrel hurls pine cones with terrifying accuracy as branches sway underfoot.");
+                Println(hasSword
+                    ? "You bat the missiles aside and drive forward until it loses nerve and vanishes into the leaves."
+                    : "You stumble through the barrage, catch one final dive with your forearm, and fling the beast into the canopy.");
+                break;
+
+            case 25:
+                Println("\nThe Squirrel King rises upon his acorn throne, bottle-cap crown gleaming and twig sceptre held high.");
+                Println("He unleashes a shrill decree that sounds suspiciously like an insult to your footwear.");
+                Println(hasSword
+                    ? "You parry his tiny bottle-cap sabre, endure a hail of ceremonial acorns, and swat his throne clean over with a heroic flourish."
+                    : "The royal tyrant launches himself at your face, claws flailing, and you wrestle him across the chamber in utter indignity.");
+                Println("With one final indignant squeak, the Squirrel King is chased off by his own tumbling pine-cone reserves.");
+                break;
+        }
+
+        _player.Health -= damageTaken;
+        _player.SquirrelLocationsCleared.Add(here.Id);
+        _activeSquirrelLocationId = 0;
+
+        if (!_player.IsAlive)
+        {
+            Println($"You defeat {GetSquirrelName(here.Id)}, but your wounds are too much to bear. (Health: {_player.Health}/100)");
+            return;
+        }
+
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Println($"\n*** You defeated {GetSquirrelName(here.Id)}! (Health: {_player.Health}/100) ***");
+        Console.ResetColor();
+    }
 
     private Item? FindItemInRoom(string noun) =>
         CurrentLocation().Items.FirstOrDefault(
@@ -654,7 +816,7 @@ public class Game
   │  INVENTORY / I         - List what you are carrying         │
   │  USE <item>            - Use an item                        │
   │  READ <item>           - Read something                     │
-  │  FIGHT DRAGON          - Attack a foe                       │
+    │  FIGHT <enemy>         - Attack a dragon or squirrel        │
   │  HEALTH / STATUS       - Show your current health           │
   │  HELP / ?              - Show this help                     │
   │  QUIT / Q              - Quit the game                      │
@@ -686,9 +848,19 @@ public class Game
   ║       │                                                     ║
   ║  [Castle Gates]──[Castle Courtyard]──[Castle Armory]        ║
   ║                        │                                    ║
-  ║                  [Dragon's Lair]                            ║
-  ║                        │                                    ║
-  ║                  [Treasure Vault]  ← YOUR GOAL              ║
+    ║                  [Dragon's Lair]                            ║
+    ║                        │                                    ║
+    ║                 [Squirrel Warren]                           ║
+    ║                        │                                    ║
+    ║                   [Acorn Grove]                             ║
+    ║                        │                                    ║
+    ║                   [Hollow Tree]                             ║
+    ║                        │                                    ║
+    ║                  [Treetop Canopy]                           ║
+    ║                        │                                    ║
+    ║             [Squirrel King's Chamber]                       ║
+    ║                        │                                    ║
+    ║                  [Treasure Vault]  ← YOUR GOAL              ║
   ╚═════════════════════════════════════════════════════════════╝
 """);
         Console.ResetColor();

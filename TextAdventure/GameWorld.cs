@@ -324,6 +324,71 @@ public class GameWorld
         };
 
         // ─────────────────────────────────────────────────────────────────
+        // LOCATION 21 – Squirrel Warren
+        // ─────────────────────────────────────────────────────────────────
+        _locations[21] = new Location
+        {
+            Id = 21,
+            Name = "Squirrel Warren",
+            Description = "A cramped tunnel of roots and packed earth stretches ahead, lit by shafts of dusty light. " +
+                          "Nut shells crunch underfoot, and every shadow seems to twitch just out of sight. " +
+                          "The dragon's lair lies back to the south and a narrow burrow slopes north.",
+            Exits = { ["south"] = 19, ["north"] = 22 },
+        };
+
+        // ─────────────────────────────────────────────────────────────────
+        // LOCATION 22 – Acorn Grove
+        // ─────────────────────────────────────────────────────────────────
+        _locations[22] = new Location
+        {
+            Id = 22,
+            Name = "Acorn Grove",
+            Description = "You emerge into a circular grove of ancient oaks where the ground is carpeted with acorns. " +
+                          "Tiny claw marks score the bark at every height, and the branches sway although no wind blows. " +
+                          "The warren lies south; a darker path continues north.",
+            Exits = { ["south"] = 21, ["north"] = 23 },
+        };
+
+        // ─────────────────────────────────────────────────────────────────
+        // LOCATION 23 – Hollow Tree
+        // ─────────────────────────────────────────────────────────────────
+        _locations[23] = new Location
+        {
+            Id = 23,
+            Name = "Hollow Tree",
+            Description = "Inside the trunk of an impossibly large oak, spiraling ridges of wood rise like steps around you. " +
+                          "The air smells of sap, bark, and menace. Something chatters high above in the dark. " +
+                          "The grove is south and a split in the trunk leads north.",
+            Exits = { ["south"] = 22, ["north"] = 24 },
+        };
+
+        // ─────────────────────────────────────────────────────────────────
+        // LOCATION 24 – Treetop Canopy
+        // ─────────────────────────────────────────────────────────────────
+        _locations[24] = new Location
+        {
+            Id = 24,
+            Name = "Treetop Canopy",
+            Description = "You pick your way across woven branches high above the forest floor. " +
+                          "Leaves whisper around you, and discarded pine cones lie in careful little piles like ammunition stores. " +
+                          "The hollow tree descends to the south; a rope-vine bridge stretches north.",
+            Exits = { ["south"] = 23, ["north"] = 25 },
+        };
+
+        // ─────────────────────────────────────────────────────────────────
+        // LOCATION 25 – Squirrel King's Chamber
+        // ─────────────────────────────────────────────────────────────────
+        _locations[25] = new Location
+        {
+            Id = 25,
+            Name = "Squirrel King's Chamber",
+            Description = "A vaulted chamber of bent branches and polished acorns opens before you. " +
+                          "At its centre stands a ludicrously tiny throne built from twigs, amber, and bottle caps. " +
+                          "The canopy is back to the south, while an arch of interlocked tails leads north toward the vault.",
+            Exits = { ["south"] = 24, ["north"] = 20 },
+        };
+
+        // ─────────────────────────────────────────────────────────────────
         // LOCATION 20 – Treasure Vault
         // ─────────────────────────────────────────────────────────────────
         _locations[20] = new Location
@@ -334,7 +399,7 @@ public class GameWorld
                           "Piles of ancient coins, gem-encrusted goblets and gilded armour " +
                           "fill every corner. In the very centre, on a velvet cushion, " +
                           "sits the legendary GOLDEN CROWN of the Ancient Kingdom.",
-            Exits = { ["south"] = 19 },
+            Exits = { ["south"] = 25 },
             Items = { crown },
         };
     }
