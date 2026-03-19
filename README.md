@@ -12,6 +12,8 @@ dotnet run --project .\TextAdventure\TextAdventure.csproj
 
 The goal is to recover five treasures from a world of 20 interlinked locations and return them to the Village Green.
 
+After the treasures are secured, the true ending is locked behind five random squirrel trials. When a squirrel appears, use `ATTACK SQUIRREL` to defeat it.
+
 The game supports named save slots. `SAVE` and `LOAD` use the default slot, while `SAVE chapter one` and `LOAD chapter one` read and write slot-specific files in the current working directory. `LIST SAVES` shows available slots, `DELETE chapter one` removes a named slot, `CONFIRM DELETE` removes the protected default slot, and `RENAME SAVE old TO chapter one` renames a slot.
 
 Additional vintage verbs include `PUSH`, `PULL`, `LISTEN`, and `SEARCH`.

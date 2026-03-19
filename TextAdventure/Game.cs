@@ -9,6 +9,7 @@ sealed class Game
         PropertyNameCaseInsensitive = true
     };
 
+    private readonly Random random;
     private readonly string saveDirectory;
     private GameState state;
 
@@ -18,7 +19,13 @@ sealed class Game
     }
 
     internal Game(string? saveDirectory)
+        : this(saveDirectory, null)
     {
+    }
+
+    internal Game(string? saveDirectory, Random? random)
+    {
+        this.random = random ?? Random.Shared;
         this.saveDirectory = string.IsNullOrWhiteSpace(saveDirectory)
             ? Directory.GetCurrentDirectory()
             : saveDirectory;
@@ -97,6 +104,24 @@ sealed class Game
         RenameSave(noun);
     }
 
+    internal void SecureAllTreasuresForTesting()
+    {
+        foreach (var treasureId in state.World.TreasureIds)
+        {
+            state.SecuredTreasures.Add(treasureId);
+        }
+    }
+
+    internal void ForceSquirrelEncounterForTesting(int squirrelLevel)
+    {
+        state.ActiveSquirrelLevel = squirrelLevel;
+    }
+
+    internal void AttackSquirrelForTesting()
+    {
+        HandleAttack("squirrel");
+    }
+
     private static GameState CreateNewState()
     {
         var world = WorldFactory.CreateWorld();
@@ -111,6 +136,12 @@ sealed class Game
 
     private void Execute(ParsedCommand command)
     {
+        if (state.ActiveSquirrelLevel.HasValue && !CanExecuteDuringSquirrelEncounter(command.Verb))
+        {
+            Console.WriteLine("A savage squirrel bars your path. ATTACK SQUIRREL first.");
+            return;
+        }
+
         switch (command.Verb)
         {
             case "":
@@ -186,6 +217,9 @@ sealed class Game
             case "SEARCH":
                 HandleSearch(command.Noun);
                 return;
+            case "ATTACK":
+                HandleAttack(command.Noun);
+                return;
             default:
                 Console.WriteLine("I do not understand that command.");
                 return;
@@ -228,6 +262,23 @@ sealed class Game
         state.CurrentRoomId = targetRoomId;
         state.Moves++;
         DescribeCurrentRoom(forceFullDescription: false);
+        MaybeTriggerSquirrelEncounter();
+    }
+
+    private void MaybeTriggerSquirrelEncounter()
+    {
+        if (state.ActiveSquirrelLevel.HasValue || !AreSquirrelTrialsActive())
+        {
+            return;
+        }
+
+        if (random.Next(4) != 0)
+        {
+            return;
+        }
+
+        state.ActiveSquirrelLevel = state.SquirrelsDefeated + 1;
+        Console.WriteLine($"A furious squirrel of level {state.ActiveSquirrelLevel.Value} leaps from hiding. ATTACK SQUIRREL to defeat it.");
     }
 
     private string? GetBlockedMovementMessage(string roomId, Direction direction)
@@ -311,8 +362,14 @@ sealed class Game
 
             if (state.SecuredTreasures.Count == state.World.TreasureIds.Count)
             {
-                state.Won = true;
-                Console.WriteLine("As the last treasure touches the plinth, a bell begins to toll across the valley.");
+                if (TryCompleteAdventure())
+                {
+                    Console.WriteLine("As the last treasure touches the plinth, a bell begins to toll across the valley.");
+                }
+                else
+                {
+                    Console.WriteLine($"The plinth shudders and five squirrel trials awaken. Defeat {state.RequiredSquirrelTrials - state.SquirrelsDefeated} squirrel foes before the land will accept your victory.");
+                }
             }
 
             return;
@@ -627,6 +684,46 @@ sealed class Game
         Console.WriteLine("You search carefully but uncover nothing of value.");
     }
 
+    private void HandleAttack(string? noun)
+    {
+        if (!state.ActiveSquirrelLevel.HasValue)
+        {
+            Console.WriteLine("You lash out at empty air.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(noun))
+        {
+            Console.WriteLine("ATTACK what?");
+            return;
+        }
+
+        if (ItemDefinition.Normalize(noun) is not "SQUIRREL" and not "MAD SQUIRREL" and not "BEAST" and not "CREATURE")
+        {
+            Console.WriteLine("The squirrel is your immediate problem.");
+            return;
+        }
+
+        var squirrelLevel = state.ActiveSquirrelLevel.Value;
+        state.ActiveSquirrelLevel = null;
+        state.SquirrelsDefeated++;
+        state.Moves++;
+
+        Console.WriteLine($"You defeat the level {squirrelLevel} squirrel after a brief, furious struggle.");
+        Console.WriteLine($"Squirrels defeated: {state.SquirrelsDefeated}/{state.RequiredSquirrelTrials}.");
+
+        if (AreSquirrelTrialsActive())
+        {
+            Console.WriteLine("More squirrel trials remain before the end can truly come.");
+            return;
+        }
+
+        if (TryCompleteAdventure())
+        {
+            Console.WriteLine("With the final squirrel defeated, the last barrier to victory falls away.");
+        }
+    }
+
     private void HandleListSaves()
     {
         var slots = ListSaveSlots();
@@ -788,6 +885,8 @@ sealed class Game
             Inventory = state.Inventory.OrderBy(item => item).ToList(),
             Flags = state.Flags.OrderBy(flag => flag).ToList(),
             SecuredTreasures = state.SecuredTreasures.OrderBy(item => item).ToList(),
+            SquirrelsDefeated = state.SquirrelsDefeated,
+            ActiveSquirrelLevel = state.ActiveSquirrelLevel,
             Moves = state.Moves,
             RoomItems = state.World.Rooms.Values.ToDictionary(
                 room => room.Id,
@@ -874,6 +973,8 @@ sealed class Game
 
         restoredState.CurrentRoomId = saveData.CurrentRoomId;
         restoredState.Moves = saveData.Moves;
+        restoredState.SquirrelsDefeated = saveData.SquirrelsDefeated;
+        restoredState.ActiveSquirrelLevel = saveData.ActiveSquirrelLevel;
 
         restoredState.Inventory.Clear();
         foreach (var itemId in saveData.Inventory)
@@ -950,6 +1051,11 @@ sealed class Game
         {
             Console.WriteLine("Your task is to recover the five lost treasures and leave them here on the plinth.");
         }
+
+        if (state.ActiveSquirrelLevel.HasValue)
+        {
+            Console.WriteLine($"A level {state.ActiveSquirrelLevel.Value} squirrel crouches here, ready to spring.");
+        }
     }
 
     private void PrintDynamicRoomText(Room room)
@@ -976,6 +1082,10 @@ sealed class Game
                 break;
             case "village-green" when state.SecuredTreasures.Count > 0:
                 Console.WriteLine($"Secured treasures on the plinth: {state.SecuredTreasures.Count}/{state.World.TreasureIds.Count}.");
+                if (state.SecuredTreasures.Count == state.World.TreasureIds.Count && state.SquirrelsDefeated < state.RequiredSquirrelTrials)
+                {
+                    Console.WriteLine($"The final squirrel trials await: {state.SquirrelsDefeated}/{state.RequiredSquirrelTrials} defeated.");
+                }
                 break;
         }
     }
@@ -1006,6 +1116,7 @@ sealed class Game
     private void ShowScore()
     {
         Console.WriteLine($"You have secured {state.SecuredTreasures.Count} of {state.World.TreasureIds.Count} treasures in {state.Moves} moves.");
+        Console.WriteLine($"Squirrel trials cleared: {state.SquirrelsDefeated}/{state.RequiredSquirrelTrials}.");
     }
 
     private void ShowHelp(string? noun)
@@ -1018,7 +1129,7 @@ sealed class Game
 
         Console.WriteLine("Commands: LOOK, GO NORTH, GO SOUTH, GO EAST, GO WEST, GO UP, GO DOWN,");
         Console.WriteLine("GET item, DROP item, EXAMINE item, USE item, READ object, OPEN object,");
-        Console.WriteLine("CLIMB, PUSH object, PULL object, LISTEN, SEARCH, INVENTORY,");
+        Console.WriteLine("CLIMB, PUSH object, PULL object, LISTEN, SEARCH, ATTACK squirrel, INVENTORY,");
         Console.WriteLine("SCORE, SAVE [slot], LOAD [slot], LIST SAVES, DELETE [slot], RENAME SAVE,");
         Console.WriteLine("HELP SAVES, HELP, QUIT.");
         Console.WriteLine("Short movement commands: N, S, E, W, U, D.");
@@ -1076,6 +1187,9 @@ sealed class Game
             "ASCEND" => new ParsedCommand("CLIMB", noun),
             "HEAR" => new ParsedCommand("LISTEN", noun),
             "INSPECT" => new ParsedCommand("SEARCH", noun),
+            "FIGHT" => new ParsedCommand("ATTACK", noun),
+            "KILL" => new ParsedCommand("ATTACK", noun),
+            "HIT" => new ParsedCommand("ATTACK", noun),
             "LIST" when ItemDefinition.Normalize(noun ?? string.Empty) is "SAVES" or "SAVE SLOTS" or "SLOTS" => new ParsedCommand("LISTSAVES", null),
             "DELETE" => new ParsedCommand("DELETE", noun),
             "CONFIRM" when ItemDefinition.Normalize(noun ?? string.Empty) is "DELETE" or "DELETE DEFAULT" or "DELETE SAVE" or "DELETE SAVE DEFAULT" => new ParsedCommand("CONFIRMDELETE", noun),
@@ -1300,6 +1414,28 @@ sealed class Game
         Console.WriteLine("ADVENTURELAND 1976");
         Console.WriteLine("------------------");
         Console.WriteLine("Recover the five lost treasures and return them to the Village Green.");
+        Console.WriteLine("Five random squirrel trials stand between you and the true ending.");
         Console.WriteLine("Type HELP for the command list.");
+    }
+
+    private bool CanExecuteDuringSquirrelEncounter(string verb)
+    {
+        return verb is "LOOK" or "HELP" or "INVENTORY" or "SCORE" or "SAVE" or "LOAD" or "LISTSAVES" or "DELETE" or "CONFIRMDELETE" or "RENAMESAVE" or "QUIT" or "EXAMINE" or "ATTACK";
+    }
+
+    private bool AreSquirrelTrialsActive()
+    {
+        return state.SecuredTreasures.Count == state.World.TreasureIds.Count && state.SquirrelsDefeated < state.RequiredSquirrelTrials;
+    }
+
+    private bool TryCompleteAdventure()
+    {
+        if (state.SecuredTreasures.Count == state.World.TreasureIds.Count && state.SquirrelsDefeated >= state.RequiredSquirrelTrials)
+        {
+            state.Won = true;
+            return true;
+        }
+
+        return false;
     }
 }

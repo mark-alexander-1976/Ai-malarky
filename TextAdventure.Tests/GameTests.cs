@@ -16,6 +16,7 @@ public sealed class GameTests
         var confirmDelete = Game.ParseForTesting("confirm delete");
         var rename = Game.ParseForTesting("rename save old to chapter one");
         var helpSaves = Game.ParseForTesting("help saves");
+        var fight = Game.ParseForTesting("fight squirrel");
 
         Assert.Equal("SAVE", save.Verb);
         Assert.Equal("Chapter One", save.Noun);
@@ -36,6 +37,8 @@ public sealed class GameTests
         Assert.Equal("save old to chapter one", rename.Noun);
         Assert.Equal("HELP", helpSaves.Verb);
         Assert.Equal("saves", helpSaves.Noun);
+        Assert.Equal("ATTACK", fight.Verb);
+        Assert.Equal("squirrel", fight.Noun);
     }
 
     [Fact]
@@ -67,6 +70,8 @@ public sealed class GameTests
             state.Flags.Add("lamp-lit");
             state.Flags.Add("vault-unlocked");
             state.SecuredTreasures.Add("opal-seal");
+            state.SquirrelsDefeated = 2;
+            state.ActiveSquirrelLevel = 3;
             state.World.Rooms["lantern-hut"].ItemIds.Clear();
 
             game.SaveGameForTesting("Chapter One");
@@ -94,6 +99,8 @@ public sealed class GameTests
             Assert.Contains("lamp-lit", game.CurrentState.Flags);
             Assert.Contains("vault-unlocked", game.CurrentState.Flags);
             Assert.Contains("opal-seal", game.CurrentState.SecuredTreasures);
+            Assert.Equal(2, game.CurrentState.SquirrelsDefeated);
+            Assert.Equal(3, game.CurrentState.ActiveSquirrelLevel);
             Assert.DoesNotContain("lamp", game.CurrentState.World.Rooms["lantern-hut"].ItemIds);
 
             game.LoadGameForTesting("Chapter Two");
@@ -180,5 +187,20 @@ public sealed class GameTests
                 Directory.Delete(saveDirectory, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public void FinalVictory_RequiresDefeatingFiveSquirrels()
+    {
+        var game = new Game(saveDirectory: null, random: new Random(0));
+        game.SecureAllTreasuresForTesting();
+        game.CurrentState.SquirrelsDefeated = 4;
+        game.ForceSquirrelEncounterForTesting(5);
+
+        game.AttackSquirrelForTesting();
+
+        Assert.True(game.CurrentState.Won);
+        Assert.Equal(5, game.CurrentState.SquirrelsDefeated);
+        Assert.Null(game.CurrentState.ActiveSquirrelLevel);
     }
 }

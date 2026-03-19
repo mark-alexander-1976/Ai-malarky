@@ -108,6 +108,9 @@ sealed class GameState
     public HashSet<string> Inventory { get; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> Flags { get; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> SecuredTreasures { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public int SquirrelsDefeated { get; set; }
+    public int RequiredSquirrelTrials { get; init; } = 5;
+    public int? ActiveSquirrelLevel { get; set; }
     public int Moves { get; set; }
     public bool QuitRequested { get; set; }
     public bool Won { get; set; }
@@ -121,5 +124,7 @@ sealed class SaveData
     public required List<string> Flags { get; init; }
     public required List<string> SecuredTreasures { get; init; }
     public required Dictionary<string, List<string>> RoomItems { get; init; }
+    public int SquirrelsDefeated { get; init; }
+    public int? ActiveSquirrelLevel { get; init; }
     public int Moves { get; init; }
 }
