@@ -14,6 +14,9 @@ The goal is to recover five treasures from a world of 20 interlinked locations a
 
 After the treasures are secured, the true ending is locked behind five random squirrel trials. When a squirrel appears, use `ATTACK SQUIRREL` to defeat it.
 
+Use `SHOW MAP` at any time to print a boxed ASCII world map and highlight your current location.
+Use `SET MINIMAP ON` to automatically print a local mini-map after each move, and `SET MINIMAP OFF` to disable it again.
+
 The game supports named save slots. `SAVE` and `LOAD` use the default slot, while `SAVE chapter one` and `LOAD chapter one` read and write slot-specific files in the current working directory. `LIST SAVES` shows available slots, `DELETE chapter one` removes a named slot, `CONFIRM DELETE` removes the protected default slot, and `RENAME SAVE old TO chapter one` renames a slot.
 
 Additional vintage verbs include `PUSH`, `PULL`, `LISTEN`, and `SEARCH`.

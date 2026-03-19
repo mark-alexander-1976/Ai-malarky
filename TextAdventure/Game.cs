@@ -122,6 +122,21 @@ sealed class Game
         HandleAttack("squirrel");
     }
 
+    internal void ExecuteForTesting(string input)
+    {
+        Execute(Parse(input));
+    }
+
+    internal string GetMapTextForTesting()
+    {
+        return BuildMapText();
+    }
+
+    internal string GetMiniMapTextForTesting()
+    {
+        return BuildMiniMapText();
+    }
+
     private static GameState CreateNewState()
     {
         var world = WorldFactory.CreateWorld();
@@ -158,6 +173,12 @@ sealed class Game
                 return;
             case "SCORE":
                 ShowScore();
+                return;
+            case "SHOWMAP":
+                ShowMap();
+                return;
+            case "SETMINIMAP":
+                SetMiniMap(command.Noun);
                 return;
             case "SAVE":
                 SaveGame(command.Noun);
@@ -263,6 +284,11 @@ sealed class Game
         state.Moves++;
         DescribeCurrentRoom(forceFullDescription: false);
         MaybeTriggerSquirrelEncounter();
+
+        if (state.AutoMiniMapEnabled)
+        {
+            ShowMiniMap();
+        }
     }
 
     private void MaybeTriggerSquirrelEncounter()
@@ -885,6 +911,7 @@ sealed class Game
             Inventory = state.Inventory.OrderBy(item => item).ToList(),
             Flags = state.Flags.OrderBy(flag => flag).ToList(),
             SecuredTreasures = state.SecuredTreasures.OrderBy(item => item).ToList(),
+            AutoMiniMapEnabled = state.AutoMiniMapEnabled,
             SquirrelsDefeated = state.SquirrelsDefeated,
             ActiveSquirrelLevel = state.ActiveSquirrelLevel,
             Moves = state.Moves,
@@ -973,6 +1000,7 @@ sealed class Game
 
         restoredState.CurrentRoomId = saveData.CurrentRoomId;
         restoredState.Moves = saveData.Moves;
+        restoredState.AutoMiniMapEnabled = saveData.AutoMiniMapEnabled;
         restoredState.SquirrelsDefeated = saveData.SquirrelsDefeated;
         restoredState.ActiveSquirrelLevel = saveData.ActiveSquirrelLevel;
 
@@ -1119,6 +1147,179 @@ sealed class Game
         Console.WriteLine($"Squirrel trials cleared: {state.SquirrelsDefeated}/{state.RequiredSquirrelTrials}.");
     }
 
+    private void ShowMap()
+    {
+        Console.WriteLine(BuildMapText());
+    }
+
+    private string BuildMapText()
+    {
+        const int width = 18;
+        var lines = new[]
+        {
+            "MAP OF THE VALLEY (* marks your location)",
+            string.Empty,
+            Center(MapBox("village-green", width), width * 3 + 10),
+            Center("|", width * 3 + 10),
+            Center("NORTH", width * 3 + 10),
+            Center("|", width * 3 + 10),
+            Center(MapBox("north-road", width), width * 3 + 10),
+            Center("/ \\", width * 3 + 10),
+            Center("/   \\", width * 3 + 10),
+            Combine(MapBox("watchtower-base", width), "     ", MapBox("old-well", width)),
+            Combine(Center("|", width), "     ", Center("|", width)),
+            Combine(Center("UP", width), "     ", Center("DOWN", width)),
+            Combine(Center("|", width), "     ", Center("|", width)),
+            Combine(MapBox("moon-tower", width), "     ", MapBox("crypt-entry", width)),
+            Combine(Center("|", width), "     ", Center("|", width)),
+            Combine(Center("SOUTH", width), "     ", Center("EAST", width)),
+            Combine(Center("|", width), "     ", Center("|", width)),
+            Combine(MapBox("treasure-vault", width), "-----", MapBox("echo-chamber", width)),
+            new string(' ', width + 5) + Center("EAST", width),
+            new string(' ', width + 5) + Center("|", width),
+            new string(' ', width + 5) + MapBox("serpent-shrine", width),
+            string.Empty,
+            Combine(MapBox("west-road", width), "-----", MapBox("village-green", width), "-----", MapBox("east-road", width)),
+            Combine(Center("|", width), "     ", Center("|", width), "     ", Center("|", width)),
+            Combine(Center("NORTH", width), "     ", Center("SOUTH", width), "     ", Center("NORTH", width)),
+            Combine(Center("|", width), "     ", Center("|", width), "     ", Center("|", width)),
+            Combine(MapBox("whispering-glen", width), "     ", MapBox("south-road", width), "     ", MapBox("lantern-hut", width)),
+            Combine(Center("|", width), "     ", Center("|", width), "     ", Center(string.Empty, width)),
+            Combine(Center("NORTH", width), "     ", Center("SOUTH", width), "     ", Center(string.Empty, width)),
+            Combine(Center("|", width), "     ", Center("|", width), "     ", Center(string.Empty, width)),
+            Combine(MapBox("echo-chamber", width), "     ", MapBox("sunken-stair", width), "     ", MapBox("stone-bridge", width)),
+            Combine(Center(string.Empty, width), "     ", Center("|", width), "     ", Center("|", width)),
+            Combine(Center(string.Empty, width), "     ", Center("DOWN", width), "     ", Center("NORTH", width)),
+            Combine(Center(string.Empty, width), "     ", Center("|", width), "     ", Center("|", width)),
+            Combine(MapBox("mossy-clearing", width), "-----", MapBox("underground-lake", width), "-----", MapBox("wizard-study", width)),
+            Combine(Center("|", width), "     ", Center("EAST", width), "     ", Center("EAST", width)),
+            Combine(Center("SOUTH", width), "     ", Center("|", width), "     ", Center("|", width)),
+            Combine(Center("|", width), "     ", Center("|", width), "     ", Center("|", width)),
+            Combine(MapBox("rope-chasm", width), "-----", MapBox("treasure-vault", width), "-----", MapBox("moon-tower", width)),
+            string.Empty,
+            $"You are at: {state.CurrentRoom.Name}."
+        };
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private void ShowMiniMap()
+    {
+        Console.WriteLine(BuildMiniMapText());
+    }
+
+    private string BuildMiniMapText()
+    {
+        const int width = 18;
+        var room = state.CurrentRoom;
+        room.Exits.TryGetValue(Direction.North, out var northRoomId);
+        room.Exits.TryGetValue(Direction.South, out var southRoomId);
+        room.Exits.TryGetValue(Direction.East, out var eastRoomId);
+        room.Exits.TryGetValue(Direction.West, out var westRoomId);
+        room.Exits.TryGetValue(Direction.Up, out var upRoomId);
+        room.Exits.TryGetValue(Direction.Down, out var downRoomId);
+
+        var lines = new List<string>
+        {
+            "MINI-MAP",
+            Center(OptionalMapBox(northRoomId, width), width * 3 + 8),
+            Center(string.IsNullOrEmpty(northRoomId) ? string.Empty : "|", width * 3 + 8),
+            BuildMiniMapMiddleRow(westRoomId, room.Id, eastRoomId, width),
+            Center(string.IsNullOrEmpty(southRoomId) ? string.Empty : "|", width * 3 + 8),
+            Center(OptionalMapBox(southRoomId, width), width * 3 + 8)
+        };
+
+        if (!string.IsNullOrEmpty(upRoomId) || !string.IsNullOrEmpty(downRoomId))
+        {
+            lines.Add($"UP: {RoomNameOrNone(upRoomId)}   DOWN: {RoomNameOrNone(downRoomId)}");
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private void SetMiniMap(string? noun)
+    {
+        var normalized = ItemDefinition.Normalize(noun ?? string.Empty);
+        switch (normalized)
+        {
+            case "ON":
+            case "YES":
+                state.AutoMiniMapEnabled = true;
+                Console.WriteLine("Mini-map display is now ON.");
+                ShowMiniMap();
+                return;
+            case "OFF":
+            case "NO":
+                state.AutoMiniMapEnabled = false;
+                Console.WriteLine("Mini-map display is now OFF.");
+                return;
+            default:
+                Console.WriteLine("Use SET MINIMAP ON or SET MINIMAP OFF.");
+                return;
+        }
+    }
+
+    private string MapBox(string roomId, int width)
+    {
+        var label = state.World.Rooms[roomId].Name;
+        if (state.CurrentRoomId == roomId)
+        {
+            label = $"*{label}*";
+        }
+
+        return $"[{PadOrTrim(label, width)}]";
+    }
+
+    private string OptionalMapBox(string? roomId, int width)
+    {
+        return string.IsNullOrWhiteSpace(roomId) ? new string(' ', width + 2) : MapBox(roomId, width);
+    }
+
+    private string RoomNameOrNone(string? roomId)
+    {
+        return string.IsNullOrWhiteSpace(roomId) ? "none" : state.World.Rooms[roomId].Name;
+    }
+
+    private static string PadOrTrim(string text, int width)
+    {
+        if (text.Length > width)
+        {
+            return text.Substring(0, width);
+        }
+
+        return text.PadRight(width);
+    }
+
+    private static string Center(string text, int width)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return new string(' ', width);
+        }
+
+        if (text.Length >= width)
+        {
+            return text;
+        }
+
+        var leftPadding = (width - text.Length) / 2;
+        return new string(' ', leftPadding) + text;
+    }
+
+    private static string Combine(params string[] parts)
+    {
+        return string.Concat(parts);
+    }
+
+    private string BuildMiniMapMiddleRow(string? westRoomId, string currentRoomId, string? eastRoomId, int width)
+    {
+        var west = OptionalMapBox(westRoomId, width);
+        var east = OptionalMapBox(eastRoomId, width);
+        var leftConnector = string.IsNullOrWhiteSpace(westRoomId) ? "  " : "--";
+        var rightConnector = string.IsNullOrWhiteSpace(eastRoomId) ? "  " : "--";
+        return Combine(west, leftConnector, MapBox(currentRoomId, width), rightConnector, east);
+    }
+
     private void ShowHelp(string? noun)
     {
         if (ItemDefinition.Normalize(noun ?? string.Empty) is "SAVES" or "SAVE" or "SAVE SLOTS" or "SLOTS")
@@ -1130,7 +1331,8 @@ sealed class Game
         Console.WriteLine("Commands: LOOK, GO NORTH, GO SOUTH, GO EAST, GO WEST, GO UP, GO DOWN,");
         Console.WriteLine("GET item, DROP item, EXAMINE item, USE item, READ object, OPEN object,");
         Console.WriteLine("CLIMB, PUSH object, PULL object, LISTEN, SEARCH, ATTACK squirrel, INVENTORY,");
-        Console.WriteLine("SCORE, SAVE [slot], LOAD [slot], LIST SAVES, DELETE [slot], RENAME SAVE,");
+        Console.WriteLine("SCORE, SHOW MAP, SET MINIMAP ON, SET MINIMAP OFF, SAVE [slot], LOAD [slot],");
+        Console.WriteLine("LIST SAVES, DELETE [slot], RENAME SAVE,");
         Console.WriteLine("HELP SAVES, HELP, QUIT.");
         Console.WriteLine("Short movement commands: N, S, E, W, U, D.");
     }
@@ -1190,6 +1392,11 @@ sealed class Game
             "FIGHT" => new ParsedCommand("ATTACK", noun),
             "KILL" => new ParsedCommand("ATTACK", noun),
             "HIT" => new ParsedCommand("ATTACK", noun),
+            "MAP" => new ParsedCommand("SHOWMAP", null),
+            "SHOW" when ItemDefinition.Normalize(noun ?? string.Empty) == "MAP" => new ParsedCommand("SHOWMAP", null),
+            "SET" when ItemDefinition.Normalize(noun ?? string.Empty).StartsWith("MINIMAP ", StringComparison.OrdinalIgnoreCase)
+                => new ParsedCommand("SETMINIMAP", noun!.Substring(noun.IndexOf(' ') + 1)),
+            "MINIMAP" => new ParsedCommand("SETMINIMAP", noun),
             "LIST" when ItemDefinition.Normalize(noun ?? string.Empty) is "SAVES" or "SAVE SLOTS" or "SLOTS" => new ParsedCommand("LISTSAVES", null),
             "DELETE" => new ParsedCommand("DELETE", noun),
             "CONFIRM" when ItemDefinition.Normalize(noun ?? string.Empty) is "DELETE" or "DELETE DEFAULT" or "DELETE SAVE" or "DELETE SAVE DEFAULT" => new ParsedCommand("CONFIRMDELETE", noun),
@@ -1420,7 +1627,7 @@ sealed class Game
 
     private bool CanExecuteDuringSquirrelEncounter(string verb)
     {
-        return verb is "LOOK" or "HELP" or "INVENTORY" or "SCORE" or "SAVE" or "LOAD" or "LISTSAVES" or "DELETE" or "CONFIRMDELETE" or "RENAMESAVE" or "QUIT" or "EXAMINE" or "ATTACK";
+        return verb is "LOOK" or "HELP" or "INVENTORY" or "SCORE" or "SHOWMAP" or "SETMINIMAP" or "SAVE" or "LOAD" or "LISTSAVES" or "DELETE" or "CONFIRMDELETE" or "RENAMESAVE" or "QUIT" or "EXAMINE" or "ATTACK";
     }
 
     private bool AreSquirrelTrialsActive()

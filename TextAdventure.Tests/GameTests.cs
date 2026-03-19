@@ -17,6 +17,10 @@ public sealed class GameTests
         var rename = Game.ParseForTesting("rename save old to chapter one");
         var helpSaves = Game.ParseForTesting("help saves");
         var fight = Game.ParseForTesting("fight squirrel");
+        var showMap = Game.ParseForTesting("show map");
+        var map = Game.ParseForTesting("map");
+        var setMiniMap = Game.ParseForTesting("set minimap on");
+        var miniMap = Game.ParseForTesting("minimap off");
 
         Assert.Equal("SAVE", save.Verb);
         Assert.Equal("Chapter One", save.Noun);
@@ -39,6 +43,45 @@ public sealed class GameTests
         Assert.Equal("saves", helpSaves.Noun);
         Assert.Equal("ATTACK", fight.Verb);
         Assert.Equal("squirrel", fight.Noun);
+        Assert.Equal("SHOWMAP", showMap.Verb);
+        Assert.Null(showMap.Noun);
+        Assert.Equal("SHOWMAP", map.Verb);
+        Assert.Null(map.Noun);
+        Assert.Equal("SETMINIMAP", setMiniMap.Verb);
+        Assert.Equal("on", setMiniMap.Noun);
+        Assert.Equal("SETMINIMAP", miniMap.Verb);
+        Assert.Equal("off", miniMap.Noun);
+    }
+
+    [Fact]
+    public void ShowMap_DisplaysCurrentLocation()
+    {
+        var game = new Game(saveDirectory: null, random: new Random(0));
+        game.CurrentState.CurrentRoomId = "rope-chasm";
+
+        var output = CaptureConsole(() => game.ExecuteForTesting("show map"));
+
+        Assert.Contains("MAP OF THE VALLEY", output);
+        Assert.Contains("[*Rope Chasm*", output);
+        Assert.Contains("[Village Green", output);
+        Assert.Contains("You are at: Rope Chasm.", output);
+    }
+
+    [Fact]
+    public void MiniMap_CanBeEnabled_AndAppearsAfterMovement()
+    {
+        var game = new Game(saveDirectory: null, random: new Random(0));
+
+        var output = CaptureConsole(() =>
+        {
+            game.ExecuteForTesting("set minimap on");
+            game.ExecuteForTesting("go north");
+        });
+
+        Assert.True(game.CurrentState.AutoMiniMapEnabled);
+        Assert.Contains("Mini-map display is now ON.", output);
+        Assert.Contains("MINI-MAP", output);
+        Assert.Contains("[*North Road*", output);
     }
 
     [Fact]
@@ -70,6 +113,7 @@ public sealed class GameTests
             state.Flags.Add("lamp-lit");
             state.Flags.Add("vault-unlocked");
             state.SecuredTreasures.Add("opal-seal");
+            state.AutoMiniMapEnabled = true;
             state.SquirrelsDefeated = 2;
             state.ActiveSquirrelLevel = 3;
             state.World.Rooms["lantern-hut"].ItemIds.Clear();
@@ -99,6 +143,7 @@ public sealed class GameTests
             Assert.Contains("lamp-lit", game.CurrentState.Flags);
             Assert.Contains("vault-unlocked", game.CurrentState.Flags);
             Assert.Contains("opal-seal", game.CurrentState.SecuredTreasures);
+            Assert.True(game.CurrentState.AutoMiniMapEnabled);
             Assert.Equal(2, game.CurrentState.SquirrelsDefeated);
             Assert.Equal(3, game.CurrentState.ActiveSquirrelLevel);
             Assert.DoesNotContain("lamp", game.CurrentState.World.Rooms["lantern-hut"].ItemIds);
@@ -202,5 +247,22 @@ public sealed class GameTests
         Assert.True(game.CurrentState.Won);
         Assert.Equal(5, game.CurrentState.SquirrelsDefeated);
         Assert.Null(game.CurrentState.ActiveSquirrelLevel);
+    }
+
+    private static string CaptureConsole(Action action)
+    {
+        var originalOut = Console.Out;
+        using var writer = new StringWriter();
+
+        try
+        {
+            Console.SetOut(writer);
+            action();
+            return writer.ToString();
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
     }
 }
