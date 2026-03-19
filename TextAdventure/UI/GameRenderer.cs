@@ -43,7 +43,7 @@ public class GameRenderer
         Console.ResetColor();
     }
 
-    public void PrintVictory(int moves)
+    public void PrintVictory(int moves, int squirrelsDefeated)
     {
         Console.ForegroundColor = ConsoleColor.Yellow;
         Console.WriteLine("""
@@ -54,11 +54,39 @@ public class GameRenderer
         ║  You've collected ALL the treasures and      ║
         ║  returned them to the sunny meadow!          ║
         ║                                              ║
+        ║  You've defeated ALL the squirrels!          ║
+        ║                                              ║
         ║  You are a TRUE ADVENTURER!                  ║
         ╚══════════════════════════════════════════════╝
         """);
         Console.ResetColor();
-        Console.WriteLine($"You completed the game in {moves} moves.");
+        Console.WriteLine($"You completed the game in {moves} moves, defeating {squirrelsDefeated} squirrels along the way.");
+    }
+
+    public void PrintSquirrelEncounter(string name, string description, int number, int total)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"\n🐿️  SQUIRREL ENCOUNTER! ({number} of {total})  🐿️");
+        Console.ForegroundColor = ConsoleColor.DarkYellow;
+        Console.WriteLine($"  {name} appears!");
+        Console.ResetColor();
+        Console.WriteLine(description);
+        Console.WriteLine("\nType FIGHT SQUIRREL or ATTACK SQUIRREL to defeat it!");
+    }
+
+    public void PrintAllSquirrelsDefeated()
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("""
+
+        ╔══════════════════════════════════════════════╗
+        ║  🐿️  ALL SQUIRRELS DEFEATED!  🐿️             ║
+        ║                                              ║
+        ║  The woodland creatures have been vanquished ║
+        ║  and the forest feels peaceful at last.      ║
+        ╚══════════════════════════════════════════════╝
+        """);
+        Console.ResetColor();
     }
 
     public void PrintHelp()
@@ -76,6 +104,7 @@ public class GameRenderer
         │   CUT <thing> - Cut something (need axe)     │
         │   SPRAY <thing> - Spray repellent             │
         │   READ <item> - Read text on something       │
+        │   FIGHT <foe> - Fight an enemy               │
         │   LOOK       - Look around (or L)            │
         │   INVENTORY  - Check your pack (or I)        │
         │   SCORE      - Check your score              │
@@ -83,6 +112,8 @@ public class GameRenderer
         │                                              │
         │ GOAL: Find all 5 treasures (*starred*) and   │
         │       bring them to the Sunny Meadow!        │
+        │       Also defeat 5 squirrels that lurk      │
+        │       in the wilderness!                     │
         └─────────────────────────────────────────────┘
         """);
     }

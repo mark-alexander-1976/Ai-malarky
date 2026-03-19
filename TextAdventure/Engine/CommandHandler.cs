@@ -6,6 +6,15 @@ public class CommandHandler(GameState state, GameRenderer renderer)
 {
     public void Execute(ParsedCommand command)
     {
+        // Squirrel encounter blocks most commands
+        if (state.InSquirrelEncounter
+            && command.Verb is not ("FIGHT" or "ATTACK")
+            && command.Verb is not ("QUIT" or "Q" or "EXIT"))
+        {
+            renderer.Print($"{state.CurrentSquirrelName} is blocking your way! You must FIGHT SQUIRREL or ATTACK SQUIRREL!");
+            return;
+        }
+
         switch (command.Verb)
         {
             case "GO":                          DoGo(command.Noun); break;
@@ -26,6 +35,7 @@ public class CommandHandler(GameState state, GameRenderer renderer)
             case "SPRAY":                       DoSpray(command.Noun); break;
             case "FEED":                        DoFeed(command.Noun); break;
             case "READ":                        DoRead(command.Noun); break;
+            case "FIGHT" or "ATTACK":           DoFight(command.Noun); break;
             default:
                 renderer.Print("I don't understand that. Type HELP for commands.");
                 break;
@@ -110,6 +120,19 @@ public class CommandHandler(GameState state, GameRenderer renderer)
         }
 
         Look();
+        TrySquirrelEncounter();
+    }
+
+    private void TrySquirrelEncounter()
+    {
+        if (!state.CanSee) return;
+        if (!state.ShouldEncounterSquirrel()) return;
+
+        var squirrel = GameState.Squirrels[state.SquirrelsDefeated];
+        state.InSquirrelEncounter = true;
+        state.CurrentSquirrelName = squirrel.Name;
+        renderer.PrintSquirrelEncounter(squirrel.Name, squirrel.Description,
+            state.SquirrelsDefeated + 1, GameState.TotalSquirrels);
     }
 
     // ── Item manipulation ───────────────────────────────────────────────────
@@ -157,7 +180,15 @@ public class CommandHandler(GameState state, GameRenderer renderer)
         if (state.CurrentRoomId == GameState.TreasureRoom
             && state.TreasuresScored == state.TreasureCount)
         {
-            renderer.PrintVictory(state.Moves);
+            if (!state.AllSquirrelsDefeated)
+            {
+                renderer.Print($"\nAll treasures are here, but you sense unfinished business...");
+                renderer.Print($"Woodland squirrels still lurk in the shadows! ({state.SquirrelsDefeated}/{GameState.TotalSquirrels} defeated)");
+                renderer.Print("Explore more rooms to encounter and defeat them all!");
+                return;
+            }
+
+            renderer.PrintVictory(state.Moves, state.SquirrelsDefeated);
             DoScore();
             state.GameOver = true;
         }
@@ -349,6 +380,12 @@ public class CommandHandler(GameState state, GameRenderer renderer)
                 else
                     renderer.Print("I don't see that here.");
                 break;
+            case "SQUIRREL":
+                if (state.InSquirrelEncounter)
+                    renderer.Print($"It's {state.CurrentSquirrelName}! A fierce woodland creature blocking your path. You'd better FIGHT it!");
+                else
+                    renderer.Print("There are no squirrels here... for now.");
+                break;
             default:
                 renderer.Print("I don't see anything special about that.");
                 break;
@@ -372,14 +409,47 @@ public class CommandHandler(GameState state, GameRenderer renderer)
             renderer.Print("  (The lamp is lit)");
     }
 
+    private void DoFight(string noun)
+    {
+        if (!state.InSquirrelEncounter)
+        {
+            renderer.Print("There's nothing to fight here.");
+            return;
+        }
+
+        if (!noun.Equals("SQUIRREL", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrEmpty(noun))
+        {
+            renderer.Print("You can only fight the squirrel blocking your way!");
+            return;
+        }
+
+        var squirrel = GameState.Squirrels[state.SquirrelsDefeated];
+        var hasAxe = state.HasItem("axe");
+
+        if (hasAxe)
+            renderer.Print("You brandish your axe menacingly!");
+
+        renderer.Print(squirrel.DefeatMessage);
+        state.SquirrelsDefeated++;
+        state.InSquirrelEncounter = false;
+        state.CurrentSquirrelName = null;
+
+        renderer.Print($"\nSquirrels defeated: {state.SquirrelsDefeated} of {GameState.TotalSquirrels}");
+
+        if (state.AllSquirrelsDefeated)
+            renderer.PrintAllSquirrelsDefeated();
+    }
+
     private void DoScore()
     {
         var scored = state.TreasuresScored;
         var total  = state.TreasureCount;
         renderer.Print($"\nTreasures stored: {scored} of {total}");
+        renderer.Print($"Squirrels defeated: {state.SquirrelsDefeated} of {GameState.TotalSquirrels}");
         renderer.Print($"Moves taken: {state.Moves}");
 
-        if (scored == total)
+        if (scored == total && state.AllSquirrelsDefeated)
             renderer.Print("*** MAXIMUM SCORE! ***");
         else if (scored > 0)
             renderer.Print("Keep searching! More treasures await.");
