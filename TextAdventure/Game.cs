@@ -2,19 +2,30 @@ using System.Text.Json;
 
 sealed class Game
 {
-    private const string SaveFileName = "adventureland-save.json";
+    private const string DefaultSaveFileName = "adventureland-save.json";
     private static readonly JsonSerializerOptions SaveOptions = new()
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true
     };
 
+    private readonly string saveDirectory;
     private GameState state;
 
     public Game()
+        : this(null)
     {
+    }
+
+    internal Game(string? saveDirectory)
+    {
+        this.saveDirectory = string.IsNullOrWhiteSpace(saveDirectory)
+            ? Directory.GetCurrentDirectory()
+            : saveDirectory;
         state = CreateNewState();
     }
+
+    internal GameState CurrentState => state;
 
     public void Run()
     {
@@ -41,6 +52,51 @@ sealed class Game
         }
     }
 
+    internal static ParsedCommand ParseForTesting(string input)
+    {
+        return Parse(input);
+    }
+
+    internal static GameState CreateNewStateForTesting()
+    {
+        return CreateNewState();
+    }
+
+    internal void SaveGameForTesting(string? slotName)
+    {
+        SaveGame(slotName);
+    }
+
+    internal void LoadGameForTesting(string? slotName)
+    {
+        LoadGame(slotName);
+    }
+
+    internal string GetSavePathForTesting(string? slotName)
+    {
+        return GetSaveFilePath(slotName);
+    }
+
+    internal IReadOnlyList<string> ListSaveSlotsForTesting()
+    {
+        return ListSaveSlots();
+    }
+
+    internal void DeleteSaveForTesting(string? slotName)
+    {
+        DeleteSave(slotName);
+    }
+
+    internal void ConfirmDeleteSaveForTesting(string? slotName)
+    {
+        ConfirmDeleteSave(slotName);
+    }
+
+    internal void RenameSaveForTesting(string? noun)
+    {
+        RenameSave(noun);
+    }
+
     private static GameState CreateNewState()
     {
         var world = WorldFactory.CreateWorld();
@@ -64,7 +120,7 @@ sealed class Game
                 DescribeCurrentRoom(forceFullDescription: true);
                 return;
             case "HELP":
-                ShowHelp();
+                ShowHelp(command.Noun);
                 return;
             case "INVENTORY":
                 ShowInventory();
@@ -73,10 +129,22 @@ sealed class Game
                 ShowScore();
                 return;
             case "SAVE":
-                SaveGame();
+                SaveGame(command.Noun);
                 return;
             case "LOAD":
-                LoadGame();
+                LoadGame(command.Noun);
+                return;
+            case "LISTSAVES":
+                HandleListSaves();
+                return;
+            case "DELETE":
+                DeleteSave(command.Noun);
+                return;
+            case "CONFIRMDELETE":
+                ConfirmDeleteSave(command.Noun);
+                return;
+            case "RENAMESAVE":
+                RenameSave(command.Noun);
                 return;
             case "QUIT":
                 state.QuitRequested = true;
@@ -105,6 +173,18 @@ sealed class Game
                 return;
             case "CLIMB":
                 HandleClimb(command.Noun);
+                return;
+            case "PUSH":
+                HandlePush(command.Noun);
+                return;
+            case "PULL":
+                HandlePull(command.Noun);
+                return;
+            case "LISTEN":
+                HandleListen(command.Noun);
+                return;
+            case "SEARCH":
+                HandleSearch(command.Noun);
                 return;
             default:
                 Console.WriteLine("I do not understand that command.");
@@ -414,6 +494,195 @@ sealed class Game
         Console.WriteLine("There is nothing here to climb.");
     }
 
+    private void HandlePush(string? noun)
+    {
+        if (string.IsNullOrWhiteSpace(noun))
+        {
+            Console.WriteLine("PUSH what?");
+            return;
+        }
+
+        var target = ItemDefinition.Normalize(noun);
+
+        if (target is "DOOR" or "GRATE" or "GATE")
+        {
+            if (state.CurrentRoomId is "old-well" or "sunken-stair")
+            {
+                Console.WriteLine(state.Flags.Contains("grate-unlocked")
+                    ? "The unlocked grate swings under your weight."
+                    : "The locked grate refuses to move.");
+                return;
+            }
+
+            if (state.CurrentRoomId is "moon-tower" or "rope-chasm")
+            {
+                Console.WriteLine(state.Flags.Contains("vault-unlocked")
+                    ? "The moon door gives way when you shove it."
+                    : "The moon door will not yield to force.");
+                return;
+            }
+        }
+
+        if (target is "PLINTH" or "STONE")
+        {
+            Console.WriteLine("The ancient stone does not budge.");
+            return;
+        }
+
+        Console.WriteLine("It does not respond to pushing.");
+    }
+
+    private void HandlePull(string? noun)
+    {
+        if (string.IsNullOrWhiteSpace(noun))
+        {
+            Console.WriteLine("PULL what?");
+            return;
+        }
+
+        var target = ItemDefinition.Normalize(noun);
+
+        if (target == "ROPE")
+        {
+            if (state.Flags.Contains("rope-secured") && state.CurrentRoomId is "underground-lake" or "rope-chasm")
+            {
+                Console.WriteLine("The rope is stretched tight and holds firm.");
+                return;
+            }
+
+            if (state.Inventory.Contains("rope") || FindVisibleRoomItem(noun) == "rope")
+            {
+                Console.WriteLine("The rope slips through your hands with a dry rasp.");
+                return;
+            }
+        }
+
+        if (target is "CHAIN" or "LEVER")
+        {
+            Console.WriteLine("You find no hidden mechanism answering your pull.");
+            return;
+        }
+
+        Console.WriteLine("Nothing happens.");
+    }
+
+    private void HandleListen(string? noun)
+    {
+        _ = noun;
+
+        var message = state.CurrentRoomId switch
+        {
+            "village-green" => "You hear distant crows and the faint creak of village signboards.",
+            "whispering-glen" => "Water chatters softly through reeds somewhere nearby.",
+            "crypt-entry" => "Dripping water echoes in the dark like slow footsteps.",
+            "underground-lake" => "Black water laps at stone, and a low draft moans to the east.",
+            "serpent-shrine" => "The shrine is very still, save for the hollow echo of your own breath.",
+            "moon-tower" => "Wind circles the tower top in long, lonely sighs.",
+            _ => "You pause and listen, but hear nothing of immediate use."
+        };
+
+        Console.WriteLine(message);
+    }
+
+    private void HandleSearch(string? noun)
+    {
+        if (state.CurrentRoom.IsDark && !state.Flags.Contains("lamp-lit"))
+        {
+            Console.WriteLine("You fumble in the dark and find nothing certain.");
+            return;
+        }
+
+        var target = string.IsNullOrWhiteSpace(noun) ? "ROOM" : ItemDefinition.Normalize(noun);
+
+        if (target is "ROOM" or "HERE")
+        {
+            if (state.CurrentRoom.ItemIds.Count > 0)
+            {
+                PrintVisibleItems(state.CurrentRoom);
+                return;
+            }
+
+            Console.WriteLine(state.CurrentRoomId switch
+            {
+                "wizard-study" => "Among the dust you notice moon symbols worn smooth by many hands.",
+                "lantern-hut" => "A careful search turns up old oil stains and cold ashes, but nothing beyond the lamp.",
+                "old-well" => "You find only old stonework, iron bars, and the stubborn lock below.",
+                _ => "After a careful search you find nothing new."
+            });
+            return;
+        }
+
+        if (state.CurrentRoomId == "wizard-study" && target is "BOOKS" or "BOOK" or "SHELVES")
+        {
+            Console.WriteLine("Behind a row of swollen books you discover a brittle note about the moon door and its twin below the chasm.");
+            return;
+        }
+
+        if (state.CurrentRoomId == "lantern-hut" && target is "SHELVES" or "RAGS")
+        {
+            Console.WriteLine("You stir up dust and find nothing but oilcloth scraps and an empty tin.");
+            return;
+        }
+
+        Console.WriteLine("You search carefully but uncover nothing of value.");
+    }
+
+    private void HandleListSaves()
+    {
+        var slots = ListSaveSlots();
+        if (slots.Count == 0)
+        {
+            Console.WriteLine("No save slots are present.");
+            return;
+        }
+
+        Console.WriteLine($"Save slots: {string.Join(", ", slots)}.");
+    }
+
+    private void ConfirmDeleteSave(string? slotName)
+    {
+        var normalizedSlot = NormalizeSlotName(ExtractSlotName(slotName));
+        var saveFilePath = GetSaveFilePath(normalizedSlot);
+
+        if (!File.Exists(saveFilePath))
+        {
+            Console.WriteLine($"There is no saved game in slot '{normalizedSlot}'.");
+            return;
+        }
+
+        File.Delete(saveFilePath);
+        Console.WriteLine($"Deleted save slot '{normalizedSlot}'.");
+    }
+
+    private void RenameSave(string? noun)
+    {
+        if (!TryParseRenameSlots(noun, out var oldSlot, out var newSlot, out var errorMessage))
+        {
+            Console.WriteLine(errorMessage);
+            return;
+        }
+
+        var oldNormalized = NormalizeSlotName(oldSlot);
+        var newNormalized = NormalizeSlotName(newSlot);
+        var oldPath = GetSaveFilePath(oldNormalized);
+        var newPath = GetSaveFilePath(newNormalized);
+
+        if (!File.Exists(oldPath))
+        {
+            Console.WriteLine($"There is no saved game in slot '{oldNormalized}'.");
+            return;
+        }
+
+        if (File.Exists(newPath))
+        {
+            Console.WriteLine($"A save slot named '{newNormalized}' already exists.");
+            return;
+        }
+
+        File.Move(oldPath, newPath);
+        Console.WriteLine($"Renamed save slot '{oldNormalized}' to '{newNormalized}'.");
+    }
+
     private void ToggleLamp()
     {
         if (state.Flags.Contains("lamp-lit"))
@@ -509,8 +778,10 @@ sealed class Game
         Console.WriteLine("The silver key has no lock to answer it here.");
     }
 
-    private void SaveGame()
+    private void SaveGame(string? slotName)
     {
+        var normalizedSlot = NormalizeSlotName(slotName);
+        var saveFilePath = GetSaveFilePath(slotName);
         var saveData = new SaveData
         {
             CurrentRoomId = state.CurrentRoomId,
@@ -524,16 +795,17 @@ sealed class Game
                 StringComparer.OrdinalIgnoreCase)
         };
 
-        File.WriteAllText(GetSaveFilePath(), JsonSerializer.Serialize(saveData, SaveOptions));
-        Console.WriteLine($"Game saved to {GetSaveFilePath()}.");
+        File.WriteAllText(saveFilePath, JsonSerializer.Serialize(saveData, SaveOptions));
+        Console.WriteLine($"Game saved in slot '{normalizedSlot}' to {saveFilePath}.");
     }
 
-    private void LoadGame()
+    private void LoadGame(string? slotName)
     {
-        var saveFilePath = GetSaveFilePath();
+        var normalizedSlot = NormalizeSlotName(slotName);
+        var saveFilePath = GetSaveFilePath(slotName);
         if (!File.Exists(saveFilePath))
         {
-            Console.WriteLine("There is no saved game to load.");
+            Console.WriteLine($"There is no saved game in slot '{normalizedSlot}'.");
             return;
         }
 
@@ -565,8 +837,29 @@ sealed class Game
             return;
         }
 
-        Console.WriteLine("Game loaded.");
+        Console.WriteLine($"Game loaded from slot '{normalizedSlot}'.");
         DescribeCurrentRoom(forceFullDescription: true);
+    }
+
+    private void DeleteSave(string? slotName)
+    {
+        var normalizedSlot = NormalizeSlotName(ExtractSlotName(slotName));
+        var saveFilePath = GetSaveFilePath(normalizedSlot);
+
+        if (!File.Exists(saveFilePath))
+        {
+            Console.WriteLine($"There is no saved game in slot '{normalizedSlot}'.");
+            return;
+        }
+
+        if (normalizedSlot == "default")
+        {
+            Console.WriteLine("The default slot is protected. Use CONFIRM DELETE or CONFIRM DELETE DEFAULT to remove it.");
+            return;
+        }
+
+        File.Delete(saveFilePath);
+        Console.WriteLine($"Deleted save slot '{normalizedSlot}'.");
     }
 
     private static GameState RestoreState(SaveData saveData)
@@ -715,12 +1008,34 @@ sealed class Game
         Console.WriteLine($"You have secured {state.SecuredTreasures.Count} of {state.World.TreasureIds.Count} treasures in {state.Moves} moves.");
     }
 
-    private void ShowHelp()
+    private void ShowHelp(string? noun)
     {
+        if (ItemDefinition.Normalize(noun ?? string.Empty) is "SAVES" or "SAVE" or "SAVE SLOTS" or "SLOTS")
+        {
+            ShowSaveHelp();
+            return;
+        }
+
         Console.WriteLine("Commands: LOOK, GO NORTH, GO SOUTH, GO EAST, GO WEST, GO UP, GO DOWN,");
         Console.WriteLine("GET item, DROP item, EXAMINE item, USE item, READ object, OPEN object,");
-        Console.WriteLine("CLIMB, INVENTORY, SCORE, SAVE, LOAD, HELP, QUIT.");
+        Console.WriteLine("CLIMB, PUSH object, PULL object, LISTEN, SEARCH, INVENTORY,");
+        Console.WriteLine("SCORE, SAVE [slot], LOAD [slot], LIST SAVES, DELETE [slot], RENAME SAVE,");
+        Console.WriteLine("HELP SAVES, HELP, QUIT.");
         Console.WriteLine("Short movement commands: N, S, E, W, U, D.");
+    }
+
+    private static void ShowSaveHelp()
+    {
+        Console.WriteLine("SAVE MANAGEMENT");
+        Console.WriteLine("SAVE                save to the default slot");
+        Console.WriteLine("LOAD                load the default slot");
+        Console.WriteLine("SAVE chapter one    save to a named slot");
+        Console.WriteLine("LOAD chapter one    load a named slot");
+        Console.WriteLine("LIST SAVES          list all available slots");
+        Console.WriteLine("DELETE chapter one  delete a named slot");
+        Console.WriteLine("CONFIRM DELETE      delete the protected default slot");
+        Console.WriteLine("RENAME SAVE old new rename single-word slots");
+        Console.WriteLine("RENAME SAVE old TO new   rename multi-word slots safely");
     }
 
     private static ParsedCommand Parse(string input)
@@ -759,6 +1074,14 @@ sealed class Game
             "LIGHT" => new ParsedCommand("USE", noun),
             "UNLOCK" => new ParsedCommand("OPEN", noun),
             "ASCEND" => new ParsedCommand("CLIMB", noun),
+            "HEAR" => new ParsedCommand("LISTEN", noun),
+            "INSPECT" => new ParsedCommand("SEARCH", noun),
+            "LIST" when ItemDefinition.Normalize(noun ?? string.Empty) is "SAVES" or "SAVE SLOTS" or "SLOTS" => new ParsedCommand("LISTSAVES", null),
+            "DELETE" => new ParsedCommand("DELETE", noun),
+            "CONFIRM" when ItemDefinition.Normalize(noun ?? string.Empty) is "DELETE" or "DELETE DEFAULT" or "DELETE SAVE" or "DELETE SAVE DEFAULT" => new ParsedCommand("CONFIRMDELETE", noun),
+            "RENAME" when !string.IsNullOrWhiteSpace(noun) && ItemDefinition.Normalize(noun).StartsWith("SAVE ", StringComparison.OrdinalIgnoreCase) => new ParsedCommand("RENAMESAVE", noun),
+            "ERASE" => new ParsedCommand("DELETE", noun),
+            "REMOVE" => new ParsedCommand("DELETE", noun),
             _ => new ParsedCommand(verb, noun)
         };
     }
@@ -837,9 +1160,139 @@ sealed class Game
         };
     }
 
-    private static string GetSaveFilePath()
+    private string GetSaveFilePath(string? slotName)
     {
-        return Path.Combine(Directory.GetCurrentDirectory(), SaveFileName);
+        var normalizedSlot = NormalizeSlotName(slotName);
+        var fileName = normalizedSlot == "default"
+            ? DefaultSaveFileName
+            : $"adventureland-save-{normalizedSlot}.json";
+        return Path.Combine(saveDirectory, fileName);
+    }
+
+    private List<string> ListSaveSlots()
+    {
+        var slots = new List<string>();
+        var defaultPath = Path.Combine(saveDirectory, DefaultSaveFileName);
+        if (File.Exists(defaultPath))
+        {
+            slots.Add("default");
+        }
+
+        if (!Directory.Exists(saveDirectory))
+        {
+            return slots;
+        }
+
+        const string prefix = "adventureland-save-";
+        const string suffix = ".json";
+
+        foreach (var filePath in Directory.EnumerateFiles(saveDirectory, "adventureland-save-*.json"))
+        {
+            var fileName = Path.GetFileName(filePath);
+            if (!fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || !fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var slot = fileName.Substring(prefix.Length, fileName.Length - prefix.Length - suffix.Length);
+            if (!string.IsNullOrWhiteSpace(slot))
+            {
+                slots.Add(slot);
+            }
+        }
+
+        slots.Sort(StringComparer.OrdinalIgnoreCase);
+        return slots;
+    }
+
+    private static string? ExtractSlotName(string? slotName)
+    {
+        if (string.IsNullOrWhiteSpace(slotName))
+        {
+            return slotName;
+        }
+
+        var normalized = ItemDefinition.Normalize(slotName);
+        if (normalized.StartsWith("SAVE ", StringComparison.OrdinalIgnoreCase))
+        {
+            return slotName.Substring(slotName.IndexOf(' ') + 1);
+        }
+
+        if (normalized.StartsWith("SLOT ", StringComparison.OrdinalIgnoreCase))
+        {
+            return slotName.Substring(slotName.IndexOf(' ') + 1);
+        }
+
+        return slotName;
+    }
+
+    private static bool TryParseRenameSlots(string? noun, out string? oldSlot, out string? newSlot, out string errorMessage)
+    {
+        oldSlot = null;
+        newSlot = null;
+
+        if (string.IsNullOrWhiteSpace(noun))
+        {
+            errorMessage = "RENAME SAVE requires an old slot and a new slot.";
+            return false;
+        }
+
+        var working = noun.Trim();
+        if (ItemDefinition.Normalize(working).StartsWith("SAVE ", StringComparison.OrdinalIgnoreCase))
+        {
+            working = working.Substring(working.IndexOf(' ') + 1).Trim();
+        }
+
+        var markerIndex = working.IndexOf(" TO ", StringComparison.OrdinalIgnoreCase);
+        if (markerIndex >= 0)
+        {
+            oldSlot = working.Substring(0, markerIndex).Trim();
+            newSlot = working.Substring(markerIndex + 4).Trim();
+        }
+        else
+        {
+            var parts = working.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length < 2)
+            {
+                errorMessage = "RENAME SAVE requires both an old slot and a new slot.";
+                return false;
+            }
+
+            oldSlot = parts[0];
+            newSlot = string.Join(' ', parts.Skip(1));
+        }
+
+        if (string.IsNullOrWhiteSpace(oldSlot) || string.IsNullOrWhiteSpace(newSlot))
+        {
+            errorMessage = "RENAME SAVE requires both an old slot and a new slot.";
+            return false;
+        }
+
+        errorMessage = string.Empty;
+        return true;
+    }
+
+    private static string NormalizeSlotName(string? slotName)
+    {
+        if (string.IsNullOrWhiteSpace(slotName))
+        {
+            return "default";
+        }
+
+        var builder = new List<char>(slotName.Length);
+
+        foreach (var character in slotName.Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(character) || character == ' ' || character == '-' || character == '_')
+            {
+                builder.Add(character);
+            }
+        }
+
+        var normalized = string.Join(' ', new string(builder.ToArray()).Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .Replace(' ', '-');
+
+        return string.IsNullOrWhiteSpace(normalized) ? "default" : normalized;
     }
 
     private static void ShowBanner()
